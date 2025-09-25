@@ -31,3 +31,8 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 /build/
 /coverage/
+
+# Example files
+example/ios/Podfile
+example/ios/Podfile.lock
+example/ios/Pods/
