@@ -14,20 +14,14 @@ class MyApp extends StatelessWidget {
 
     return MaterialApp(
       home: Scaffold(
-        appBar: AppBar(
-          title: const Text('llx_flutter Example'),
-        ),
+        appBar: AppBar(title: const Text('llx_flutter Example')),
         body: Padding(
           padding: const EdgeInsets.all(16.0),
           child: SingleChildScrollView(
-            child: Text(
-              systemInfo,
-              style: const TextStyle(fontSize: 16),
-            ),
+            child: Text(systemInfo, style: const TextStyle(fontSize: 16)),
           ),
         ),
       ),
     );
   }
 }
-

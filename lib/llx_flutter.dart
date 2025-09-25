@@ -1,4 +1,3 @@
-
 import 'dart:ffi';
 import 'dart:io';
 import 'package:ffi/ffi.dart';
@@ -23,6 +22,6 @@ final DynamicLibrary _dylib = () {
 final LlxFlutterBindings _bindings = LlxFlutterBindings(_dylib);
 
 String getSystemInfo() {
-    final ptr = _bindings.llx_get_system_info();
-    return ptr.cast<Utf8>().toDartString();
+  final ptr = _bindings.llx_get_system_info();
+  return ptr.cast<Utf8>().toDartString();
 }
