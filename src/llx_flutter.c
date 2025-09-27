@@ -81,7 +81,7 @@ FFI_PLUGIN_EXPORT llx_context_params llx_default_context_params(void) {
 FFI_PLUGIN_EXPORT llx_generate_params llx_default_generate_params(void) {
     llx_generate_params params = {0};
     params.n_predict = 32;
-    params.temperature = 0.8f;
+    params.temperature = 0.0f;
     return params;
 }
 

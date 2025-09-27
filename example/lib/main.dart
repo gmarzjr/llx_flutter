@@ -92,7 +92,7 @@ class _MyAppState extends State<MyApp> {
       });
 
       // Create context
-      final context = LlxContext.create(model, nCtx: 2048);
+      final context = LlxContext.create(model, nCtx: 1024);
 
       setState(() {
         _status = 'Generating...';
@@ -101,8 +101,8 @@ class _MyAppState extends State<MyApp> {
       // Generate with streaming
       await for (final token in context.generateStream(
         '<|im_start|>user\n/no_think ${_promptController.text}<|im_end|>\n<|im_start|>assistant\n',
-        nPredict: 500,
-        temperature: 0.8,
+        nPredict: 512,
+        temperature: 0.0,
       )) {
         setState(() {
           _response += token;
