@@ -26,14 +26,242 @@ class LlxFlutterBindings {
     ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName) lookup,
   ) : _lookup = lookup;
 
-  ffi.Pointer<ffi.Char> llx_get_system_info() {
-    return _llx_get_system_info();
+  /// Initialize/shutdown the backend
+  void llx_backend_init() {
+    return _llx_backend_init();
   }
 
-  late final _llx_get_system_infoPtr =
-      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Char> Function()>>(
-        'llx_get_system_info',
+  late final _llx_backend_initPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function()>>('llx_backend_init');
+  late final _llx_backend_init = _llx_backend_initPtr
+      .asFunction<void Function()>();
+
+  void llx_backend_free() {
+    return _llx_backend_free();
+  }
+
+  late final _llx_backend_freePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function()>>('llx_backend_free');
+  late final _llx_backend_free = _llx_backend_freePtr
+      .asFunction<void Function()>();
+
+  /// Get default parameters
+  llx_model_params llx_default_model_params() {
+    return _llx_default_model_params();
+  }
+
+  late final _llx_default_model_paramsPtr =
+      _lookup<ffi.NativeFunction<llx_model_params Function()>>(
+        'llx_default_model_params',
       );
-  late final _llx_get_system_info = _llx_get_system_infoPtr
-      .asFunction<ffi.Pointer<ffi.Char> Function()>();
+  late final _llx_default_model_params = _llx_default_model_paramsPtr
+      .asFunction<llx_model_params Function()>();
+
+  llx_context_params llx_default_context_params() {
+    return _llx_default_context_params();
+  }
+
+  late final _llx_default_context_paramsPtr =
+      _lookup<ffi.NativeFunction<llx_context_params Function()>>(
+        'llx_default_context_params',
+      );
+  late final _llx_default_context_params = _llx_default_context_paramsPtr
+      .asFunction<llx_context_params Function()>();
+
+  llx_generate_params llx_default_generate_params() {
+    return _llx_default_generate_params();
+  }
+
+  late final _llx_default_generate_paramsPtr =
+      _lookup<ffi.NativeFunction<llx_generate_params Function()>>(
+        'llx_default_generate_params',
+      );
+  late final _llx_default_generate_params = _llx_default_generate_paramsPtr
+      .asFunction<llx_generate_params Function()>();
+
+  /// Model management
+  int llx_load_model(
+    ffi.Pointer<ffi.Char> model_path,
+    ffi.Pointer<llx_model_params> params,
+    ffi.Pointer<ffi.Pointer<llx_model>> out_model,
+  ) {
+    return _llx_load_model(model_path, params, out_model);
+  }
+
+  late final _llx_load_modelPtr =
+      _lookup<
+        ffi.NativeFunction<
+          llx_error Function(
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<llx_model_params>,
+            ffi.Pointer<ffi.Pointer<llx_model>>,
+          )
+        >
+      >('llx_load_model');
+  late final _llx_load_model = _llx_load_modelPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<llx_model_params>,
+          ffi.Pointer<ffi.Pointer<llx_model>>,
+        )
+      >();
+
+  void llx_free_model(ffi.Pointer<llx_model> model) {
+    return _llx_free_model(model);
+  }
+
+  late final _llx_free_modelPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<llx_model>)>>(
+        'llx_free_model',
+      );
+  late final _llx_free_model = _llx_free_modelPtr
+      .asFunction<void Function(ffi.Pointer<llx_model>)>();
+
+  /// Context management
+  int llx_create_context(
+    ffi.Pointer<llx_model> model,
+    ffi.Pointer<llx_context_params> params,
+    ffi.Pointer<ffi.Pointer<llx_context>> out_context,
+  ) {
+    return _llx_create_context(model, params, out_context);
+  }
+
+  late final _llx_create_contextPtr =
+      _lookup<
+        ffi.NativeFunction<
+          llx_error Function(
+            ffi.Pointer<llx_model>,
+            ffi.Pointer<llx_context_params>,
+            ffi.Pointer<ffi.Pointer<llx_context>>,
+          )
+        >
+      >('llx_create_context');
+  late final _llx_create_context = _llx_create_contextPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<llx_model>,
+          ffi.Pointer<llx_context_params>,
+          ffi.Pointer<ffi.Pointer<llx_context>>,
+        )
+      >();
+
+  void llx_free_context(ffi.Pointer<llx_context> context) {
+    return _llx_free_context(context);
+  }
+
+  late final _llx_free_contextPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<llx_context>)>>(
+        'llx_free_context',
+      );
+  late final _llx_free_context = _llx_free_contextPtr
+      .asFunction<void Function(ffi.Pointer<llx_context>)>();
+
+  /// Text Generation - Streaming with callback
+  int llx_generate_stream(
+    ffi.Pointer<llx_context> context,
+    ffi.Pointer<ffi.Char> prompt,
+    ffi.Pointer<llx_generate_params> params,
+    llx_token_callback token_cb,
+    ffi.Pointer<ffi.Void> user_data,
+  ) {
+    return _llx_generate_stream(context, prompt, params, token_cb, user_data);
+  }
+
+  late final _llx_generate_streamPtr =
+      _lookup<
+        ffi.NativeFunction<
+          llx_error Function(
+            ffi.Pointer<llx_context>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<llx_generate_params>,
+            llx_token_callback,
+            ffi.Pointer<ffi.Void>,
+          )
+        >
+      >('llx_generate_stream');
+  late final _llx_generate_stream = _llx_generate_streamPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<llx_context>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<llx_generate_params>,
+          llx_token_callback,
+          ffi.Pointer<ffi.Void>,
+        )
+      >();
+
+  /// Utility Functions
+  ffi.Pointer<ffi.Char> llx_error_string(int error) {
+    return _llx_error_string(error);
+  }
+
+  late final _llx_error_stringPtr =
+      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Char> Function(llx_error)>>(
+        'llx_error_string',
+      );
+  late final _llx_error_string = _llx_error_stringPtr
+      .asFunction<ffi.Pointer<ffi.Char> Function(int)>();
 }
+
+final class llx_model extends ffi.Opaque {}
+
+final class llx_context extends ffi.Opaque {}
+
+/// Model loading parameters
+final class llx_model_params extends ffi.Struct {
+  /// Number of layers to offload to GPU (0 for CPU-only)
+  @ffi.Int32()
+  external int n_gpu_layers;
+}
+
+/// Context parameters
+final class llx_context_params extends ffi.Struct {
+  /// Context size (default: 2048)
+  @ffi.Int32()
+  external int n_ctx;
+
+  /// Number of threads (0 = auto-detect)
+  @ffi.Int32()
+  external int n_threads;
+}
+
+/// Generation parameters
+final class llx_generate_params extends ffi.Struct {
+  /// Maximum tokens to generate
+  @ffi.Int32()
+  external int n_predict;
+
+  /// Sampling temperature (0.0 = greedy)
+  @ffi.Float()
+  external double temperature;
+}
+
+/// Error codes
+typedef llx_error = ffi.Int32;
+typedef Dartllx_error = int;
+
+/// Token callback function type for streaming
+/// Returns false to stop generation
+typedef llx_token_callback =
+    ffi.Pointer<ffi.NativeFunction<llx_token_callbackFunction>>;
+typedef llx_token_callbackFunction =
+    ffi.Bool Function(
+      ffi.Pointer<ffi.Char> token_piece,
+      ffi.Pointer<ffi.Void> user_data,
+    );
+typedef Dartllx_token_callbackFunction =
+    bool Function(
+      ffi.Pointer<ffi.Char> token_piece,
+      ffi.Pointer<ffi.Void> user_data,
+    );
+
+const int LLX_SUCCESS = 0;
+
+const int LLX_ERROR_MODEL_LOAD_FAILED = -1;
+
+const int LLX_ERROR_CONTEXT_CREATION_FAILED = -2;
+
+const int LLX_ERROR_GENERATION_FAILED = -3;
+
+const int LLX_ERROR_INVALID_PARAMS = -4;
