@@ -47,6 +47,33 @@ class LlxRuntimeDiagnostics {
   String toString() => 'systemInfo: $systemInfo\nbackendInfo: $backendInfo';
 }
 
+/// Timing and token counts from the most recent generation call.
+class LlxGenerationStats {
+  final int promptTokens;
+  final int generatedTokens;
+  final double promptSeconds;
+  final double decodeSeconds;
+  final double tokensPerSecond;
+
+  const LlxGenerationStats({
+    required this.promptTokens,
+    required this.generatedTokens,
+    required this.promptSeconds,
+    required this.decodeSeconds,
+    required this.tokensPerSecond,
+  });
+
+  factory LlxGenerationStats._fromNative(llx_generation_stats stats) {
+    return LlxGenerationStats(
+      promptTokens: stats.prompt_tokens,
+      generatedTokens: stats.generated_tokens,
+      promptSeconds: stats.prompt_seconds,
+      decodeSeconds: stats.decode_seconds,
+      tokensPerSecond: stats.tokens_per_second,
+    );
+  }
+}
+
 /// Wrapper for LLX model
 class LlxModel {
   final Pointer<llx_model> _model;
@@ -219,6 +246,15 @@ class LlxContext {
       throw StateError('Cannot read thread count from disposed context');
     }
     return _bindings.llx_context_n_threads(_context);
+  }
+
+  LlxGenerationStats get generationStats {
+    if (_disposed) {
+      throw StateError('Cannot read generation stats from disposed context');
+    }
+    return LlxGenerationStats._fromNative(
+      _bindings.llx_context_generation_stats(_context),
+    );
   }
 }
 

@@ -45,8 +45,10 @@ class _LlxExamplePageState extends State<LlxExamplePage> {
   final TextEditingController _temperatureController = TextEditingController(
     text: '0.0',
   );
+  final TextEditingController _threadsController = TextEditingController();
 
   String _response = '';
+  String _metrics = '';
   LlxModel? _model;
   bool _isLoadingModel = true;
   bool _isGenerating = false;
@@ -132,18 +134,40 @@ class _LlxExamplePageState extends State<LlxExamplePage> {
       return;
     }
 
+    final threadsText = _threadsController.text.trim();
+    final requestedThreads = threadsText.isEmpty
+        ? null
+        : int.tryParse(threadsText);
+    if (threadsText.isNotEmpty &&
+        (requestedThreads == null || requestedThreads <= 0)) {
+      setState(() {
+        _response = 'Threads must be empty or a positive integer.';
+      });
+      return;
+    }
+
     final prompt = _formatQwen3Prompt(userPrompt);
 
     setState(() {
       _isGenerating = true;
       _response = '';
+      _metrics = '';
     });
 
     LlxContext? context;
 
     try {
-      context = LlxContext.create(_model!, nCtx: _contextSize);
+      context = LlxContext.create(
+        _model!,
+        nCtx: _contextSize,
+        nThreads: requestedThreads,
+      );
       debugPrint('LLX context threads: ${context.nThreads}');
+      if (mounted) {
+        setState(() {
+          _metrics = 'Threads: ${context!.nThreads}';
+        });
+      }
 
       await for (final token in context.generateStream(
         prompt,
@@ -156,6 +180,13 @@ class _LlxExamplePageState extends State<LlxExamplePage> {
           _response += token;
         });
       }
+
+      final stats = context.generationStats;
+      if (!mounted) return;
+
+      setState(() {
+        _metrics = _formatMetrics(context!, stats);
+      });
     } catch (e) {
       if (!mounted) return;
 
@@ -187,9 +218,17 @@ $userPrompt $_qwenNoThinkInstruction
     _promptController.dispose();
     _maxTokensController.dispose();
     _temperatureController.dispose();
+    _threadsController.dispose();
     _model?.dispose();
     LlxFlutter.shutdown();
     super.dispose();
+  }
+
+  String _formatMetrics(LlxContext context, LlxGenerationStats stats) {
+    return 'Threads: ${context.nThreads} | '
+        'Prompt: ${stats.promptTokens} tokens in ${stats.promptSeconds.toStringAsFixed(2)}s | '
+        'Generated: ${stats.generatedTokens} tokens in ${stats.decodeSeconds.toStringAsFixed(2)}s | '
+        '${stats.tokensPerSecond.toStringAsFixed(2)} tok/s';
   }
 
   @override
@@ -247,6 +286,19 @@ $userPrompt $_qwenNoThinkInstruction
                     ],
                   ),
                 ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _threadsController,
+                    decoration: const InputDecoration(
+                      labelText: 'Threads',
+                      hintText: 'Auto',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -268,6 +320,10 @@ $userPrompt $_qwenNoThinkInstruction
                 ),
               ],
             ),
+            if (_metrics.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Align(alignment: Alignment.centerLeft, child: Text(_metrics)),
+            ],
             const SizedBox(height: 8),
             Expanded(
               child: SingleChildScrollView(

@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 // Internal structures (hidden from API users)
@@ -37,7 +38,16 @@ struct llx_context {
     struct llama_sampler* sampler;
     const struct llama_vocab* vocab;
     int32_t n_threads;
+    llx_generation_stats last_stats;
 };
+
+static double monotonic_seconds(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return 0.0;
+    }
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1000000000.0;
+}
 
 static void append_format(char* buffer, size_t size, size_t* offset, const char* format, ...) {
     if (!buffer || !offset || *offset >= size) return;
@@ -300,6 +310,11 @@ FFI_PLUGIN_EXPORT int32_t llx_context_n_threads(const llx_context* context) {
     return context ? context->n_threads : 0;
 }
 
+FFI_PLUGIN_EXPORT llx_generation_stats llx_context_generation_stats(const llx_context* context) {
+    llx_generation_stats stats = {0};
+    return context ? context->last_stats : stats;
+}
+
 // =============================================================================
 // Text Generation
 // =============================================================================
@@ -314,6 +329,7 @@ FFI_PLUGIN_EXPORT llx_error llx_generate_stream(
     if (!context || !context->context || !prompt || !params || !token_cb) {
         return LLX_ERROR_INVALID_PARAMS;
     }
+    context->last_stats = (llx_generation_stats){0};
     
     // Clear any existing sampler configuration and set up new one
     llama_sampler_free(context->sampler);
@@ -350,10 +366,12 @@ FFI_PLUGIN_EXPORT llx_error llx_generate_stream(
     
     // Process prompt in batch (from your main.cpp)
     llama_batch batch = llama_batch_get_one(prompt_tokens, n_prompt);
+    double prompt_start = monotonic_seconds();
     if (llama_decode(context->context, batch) != 0) {
         free(prompt_tokens);
         return LLX_ERROR_GENERATION_FAILED;
     }
+    double prompt_end = monotonic_seconds();
     
     free(prompt_tokens);
     
@@ -362,6 +380,7 @@ FFI_PLUGIN_EXPORT llx_error llx_generate_stream(
     llama_token new_token_id;
     char cached_chars[256] = {0};  // For UTF-8 accumulation
     int cached_len = 0;
+    double decode_start = monotonic_seconds();
     
     for (int n_pos = n_prompt; n_pos < n_prompt + params->n_predict; n_pos++) {
         // Sample next token
@@ -405,11 +424,21 @@ FFI_PLUGIN_EXPORT llx_error llx_generate_stream(
         
         n_decode++;
     }
+    double decode_end = monotonic_seconds();
     
     // Send any remaining cached characters
     if (cached_len > 0) {
         token_cb(cached_chars, user_data);
     }
+
+    double prompt_seconds = prompt_end - prompt_start;
+    double decode_seconds = decode_end - decode_start;
+    context->last_stats.prompt_tokens = n_prompt;
+    context->last_stats.generated_tokens = n_decode;
+    context->last_stats.prompt_seconds = prompt_seconds > 0.0 ? prompt_seconds : 0.0;
+    context->last_stats.decode_seconds = decode_seconds > 0.0 ? decode_seconds : 0.0;
+    context->last_stats.tokens_per_second =
+        decode_seconds > 0.0 ? (double)n_decode / decode_seconds : 0.0;
     
     return LLX_SUCCESS;
 }

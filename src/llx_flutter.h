@@ -52,6 +52,15 @@ typedef struct {
     float temperature;        // Sampling temperature (0.0 = greedy)
 } llx_generate_params;
 
+// Generation timing/statistics from the most recent generation call
+typedef struct {
+    int32_t prompt_tokens;       // Number of prompt tokens processed
+    int32_t generated_tokens;    // Number of output tokens generated
+    double prompt_seconds;       // Prompt processing time
+    double decode_seconds;       // Output token generation time
+    double tokens_per_second;    // generated_tokens / decode_seconds
+} llx_generation_stats;
+
 // Token callback function type for streaming
 // Returns false to stop generation
 typedef bool (*llx_token_callback)(const char* token_piece, void* user_data);
@@ -92,6 +101,7 @@ FFI_PLUGIN_EXPORT llx_error llx_create_context(
 FFI_PLUGIN_EXPORT void llx_free_context(llx_context* context);
 
 FFI_PLUGIN_EXPORT int32_t llx_context_n_threads(const llx_context* context);
+FFI_PLUGIN_EXPORT llx_generation_stats llx_context_generation_stats(const llx_context* context);
 
 // Text Generation - Streaming with callback
 FFI_PLUGIN_EXPORT llx_error llx_generate_stream(

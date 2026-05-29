@@ -191,6 +191,21 @@ class LlxFlutterBindings {
   late final _llx_context_n_threads = _llx_context_n_threadsPtr
       .asFunction<int Function(ffi.Pointer<llx_context>)>();
 
+  llx_generation_stats llx_context_generation_stats(
+    ffi.Pointer<llx_context> context,
+  ) {
+    return _llx_context_generation_stats(context);
+  }
+
+  late final _llx_context_generation_statsPtr =
+      _lookup<
+        ffi.NativeFunction<
+          llx_generation_stats Function(ffi.Pointer<llx_context>)
+        >
+      >('llx_context_generation_stats');
+  late final _llx_context_generation_stats = _llx_context_generation_statsPtr
+      .asFunction<llx_generation_stats Function(ffi.Pointer<llx_context>)>();
+
   /// Text Generation - Streaming with callback
   int llx_generate_stream(
     ffi.Pointer<llx_context> context,
@@ -269,6 +284,29 @@ final class llx_generate_params extends ffi.Struct {
   /// Sampling temperature (0.0 = greedy)
   @ffi.Float()
   external double temperature;
+}
+
+/// Generation timing/statistics from the most recent generation call
+final class llx_generation_stats extends ffi.Struct {
+  /// Number of prompt tokens processed
+  @ffi.Int32()
+  external int prompt_tokens;
+
+  /// Number of output tokens generated
+  @ffi.Int32()
+  external int generated_tokens;
+
+  /// Prompt processing time
+  @ffi.Double()
+  external double prompt_seconds;
+
+  /// Output token generation time
+  @ffi.Double()
+  external double decode_seconds;
+
+  /// generated_tokens / decode_seconds
+  @ffi.Double()
+  external double tokens_per_second;
 }
 
 /// Error codes
