@@ -226,17 +226,14 @@ FFI_PLUGIN_EXPORT llx_error llx_generate_stream(
     sparams.no_perf = false;
     context->sampler = llama_sampler_chain_init(sparams);
     
-    llama_sampler_chain_add(context->sampler, llama_sampler_init_greedy());
-	/*
     if (params->temperature <= 0.0f) {
         // Greedy sampling
         llama_sampler_chain_add(context->sampler, llama_sampler_init_greedy());
     } else {
         // Temperature sampling
         llama_sampler_chain_add(context->sampler, llama_sampler_init_temp(params->temperature));
-        llama_sampler_chain_add(context->sampler, llama_sampler_init_dist(1234)); // Fixed seed for now
+        llama_sampler_chain_add(context->sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
     }
-  	*/
 
     // Tokenize the prompt
     const int n_prompt = -llama_tokenize(context->vocab, prompt, (int32_t)strlen(prompt), NULL, 0, true, true);

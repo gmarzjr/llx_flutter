@@ -38,15 +38,17 @@ class _LlxExamplePageState extends State<LlxExamplePage> {
   static const String _qwenNoThinkInstruction = '/no_think';
 
   static const int _contextSize = 1024;
-  static const int _maxGeneratedTokens = 512;
   static const int _gpuLayers = 0;
 
   final TextEditingController _promptController = TextEditingController();
+  final TextEditingController _maxTokensController =
+      TextEditingController(text: '512');
+  final TextEditingController _temperatureController =
+      TextEditingController(text: '0.0');
 
-  String _status = 'Starting...';
   String _response = '';
-  String? _modelPath;
-  bool _isPreparingModel = true;
+  LlxModel? _model;
+  bool _isLoadingModel = true;
   bool _isGenerating = false;
 
   @override
@@ -58,26 +60,32 @@ class _LlxExamplePageState extends State<LlxExamplePage> {
   Future<void> _initializeExample() async {
     try {
       LlxFlutter.initialize();
-      _setStatus('LLX backend initialized');
 
       final modelPath = await _copyAssetToTempFile(
         assetPath: _modelAssetPath,
         filename: _modelFilename,
       );
 
-      if (!mounted) return;
+      final model = LlxModel.loadFromFile(
+        modelPath,
+        nGpuLayers: _gpuLayers,
+      );
+
+      if (!mounted) {
+        model.dispose();
+        return;
+      }
 
       setState(() {
-        _modelPath = modelPath;
-        _isPreparingModel = false;
-        _status = 'Model ready';
+        _model = model;
+        _isLoadingModel = false;
       });
     } catch (e) {
       if (!mounted) return;
 
       setState(() {
-        _isPreparingModel = false;
-        _status = 'Failed to initialize example: $e';
+        _isLoadingModel = false;
+        _response = 'Failed to initialize example: $e';
       });
     }
   }
@@ -86,8 +94,6 @@ class _LlxExamplePageState extends State<LlxExamplePage> {
     required String assetPath,
     required String filename,
   }) async {
-    _setStatus('Preparing model from assets...');
-
     final data = await rootBundle.load(assetPath);
     final directory = await getTemporaryDirectory();
     final file = File('${directory.path}/$filename');
@@ -101,12 +107,29 @@ class _LlxExamplePageState extends State<LlxExamplePage> {
   }
 
   Future<void> _generate() async {
-    if (_isGenerating || _modelPath == null) return;
+    if (_isGenerating || _model == null) return;
 
     final userPrompt = _promptController.text.trim();
-
     if (userPrompt.isEmpty) {
-      _setStatus('Enter a prompt first.');
+      setState(() {
+        _response = 'Enter a prompt first.';
+      });
+      return;
+    }
+
+    final maxTokens = int.tryParse(_maxTokensController.text.trim());
+    if (maxTokens == null || maxTokens <= 0) {
+      setState(() {
+        _response = 'Max tokens must be a positive integer.';
+      });
+      return;
+    }
+
+    final temperature = double.tryParse(_temperatureController.text.trim());
+    if (temperature == null || temperature < 0) {
+      setState(() {
+        _response = 'Temperature must be a number greater than or equal to 0.';
+      });
       return;
     }
 
@@ -115,31 +138,20 @@ class _LlxExamplePageState extends State<LlxExamplePage> {
     setState(() {
       _isGenerating = true;
       _response = '';
-      _status = 'Loading model...';
     });
 
-    LlxModel? model;
     LlxContext? context;
 
     try {
-      model = LlxModel.loadFromFile(
-        _modelPath!,
-        nGpuLayers: _gpuLayers,
-      );
-
-      _setStatus('Creating context...');
-
       context = LlxContext.create(
-        model,
+        _model!,
         nCtx: _contextSize,
       );
 
-      _setStatus('Generating...');
-
       await for (final token in context.generateStream(
         prompt,
-        nPredict: _maxGeneratedTokens,
-        temperature: 0.0,
+        nPredict: maxTokens,
+        temperature: temperature,
       )) {
         if (!mounted) return;
 
@@ -147,13 +159,14 @@ class _LlxExamplePageState extends State<LlxExamplePage> {
           _response += token;
         });
       }
-
-      _setStatus('Generation complete');
     } catch (e) {
-      _setStatus('Error: $e');
+      if (!mounted) return;
+
+      setState(() {
+        _response = 'Error: $e';
+      });
     } finally {
       context?.dispose();
-      model?.dispose();
 
       if (mounted) {
         setState(() {
@@ -172,25 +185,19 @@ $userPrompt $_qwenNoThinkInstruction
 ''';
   }
 
-  void _setStatus(String status) {
-    if (!mounted) return;
-
-    setState(() {
-      _status = status;
-    });
-  }
-
   @override
   void dispose() {
     _promptController.dispose();
+    _maxTokensController.dispose();
+    _temperatureController.dispose();
+    _model?.dispose();
     LlxFlutter.shutdown();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final canGenerate =
-        !_isPreparingModel && !_isGenerating && _modelPath != null;
+    final canGenerate = !_isLoadingModel && !_isGenerating && _model != null;
 
     return Scaffold(
       appBar: AppBar(
@@ -200,47 +207,82 @@ $userPrompt $_qwenNoThinkInstruction
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            Text(
-              _status,
-              style: const TextStyle(fontSize: 16),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
             TextField(
               controller: _promptController,
               decoration: const InputDecoration(
                 labelText: 'Prompt',
-                hintText: 'Enter a prompt for the local Qwen3 model',
                 border: OutlineInputBorder(),
               ),
               minLines: 3,
               maxLines: 5,
               textInputAction: TextInputAction.newline,
             ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: canGenerate ? _generate : null,
-              child: Text(_isGenerating ? 'Generating...' : 'Generate'),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: SingleChildScrollView(
-                  child: Text(
-                    _response.isEmpty
-                        ? 'Response will appear here...'
-                        : _response,
-                    style: const TextStyle(fontSize: 14),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _maxTokensController,
+                    decoration: const InputDecoration(
+                      labelText: 'Max tokens',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
                   ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _temperatureController,
+                    decoration: const InputDecoration(
+                      labelText: 'Temperature',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      TextInputFormatter.withFunction((oldValue, newValue) {
+                        final isValid =
+                            RegExp(r'^\d*\.?\d*$').hasMatch(newValue.text);
+                        return isValid ? newValue : oldValue;
+                      }),
+                    ],
+                  ),
+                ),
+              ],
             ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: _isGenerating
+                      ? null
+                      : () {
+                          _promptController.clear();
+                        },
+                  child: const Text('Clear prompt'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: canGenerate ? _generate : null,
+                  child: Text(_isGenerating ? 'Generating...' : 'Generate'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+			Expanded(
+			  child: SingleChildScrollView(
+				child: SizedBox(
+				  width: double.infinity,
+				  child: Text(_response),
+				),
+			  ),
+			),
           ],
         ),
       ),
