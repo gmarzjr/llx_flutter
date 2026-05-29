@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:ffi/ffi.dart';
 import 'package:llx_flutter/llx_flutter.dart';
 
 void main() {

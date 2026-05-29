@@ -47,7 +47,6 @@ class LlxModel {
     
     try {
       // Set parameters
-      final defaultParams = _bindings.llx_default_model_params();
       modelParams.ref.n_gpu_layers = nGpuLayers;
       
       // Convert path to C string
@@ -202,7 +201,6 @@ void _isolateGeneration(List<dynamic> args) {
     
     // Set up generation parameters
     final genParams = calloc<llx_generate_params>();
-    final defaultParams = _bindings.llx_default_generate_params();
     genParams.ref.n_predict = nPredict;
     genParams.ref.temperature = temperature;
     
