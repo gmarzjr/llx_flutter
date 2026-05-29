@@ -64,6 +64,10 @@ typedef bool (*llx_token_callback)(const char* token_piece, void* user_data);
 FFI_PLUGIN_EXPORT void llx_backend_init(void);
 FFI_PLUGIN_EXPORT void llx_backend_free(void);
 
+// Runtime diagnostics
+FFI_PLUGIN_EXPORT const char* llx_system_info(void);
+FFI_PLUGIN_EXPORT const char* llx_backend_info(void);
+
 // Get default parameters
 FFI_PLUGIN_EXPORT llx_model_params llx_default_model_params(void);
 FFI_PLUGIN_EXPORT llx_context_params llx_default_context_params(void);
@@ -86,6 +90,8 @@ FFI_PLUGIN_EXPORT llx_error llx_create_context(
 );
 
 FFI_PLUGIN_EXPORT void llx_free_context(llx_context* context);
+
+FFI_PLUGIN_EXPORT int32_t llx_context_n_threads(const llx_context* context);
 
 // Text Generation - Streaming with callback
 FFI_PLUGIN_EXPORT llx_error llx_generate_stream(

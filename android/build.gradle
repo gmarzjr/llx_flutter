@@ -59,5 +59,11 @@ android {
 
     defaultConfig {
         minSdk = 24
+
+        externalNativeBuild {
+            cmake {
+                arguments "-DCMAKE_BUILD_TYPE=Release"
+            }
+        }
     }
 }

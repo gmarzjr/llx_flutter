@@ -14,9 +14,7 @@ class LlxExampleApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: LlxExamplePage(),
-    );
+    return const MaterialApp(home: LlxExamplePage());
   }
 }
 
@@ -41,10 +39,12 @@ class _LlxExamplePageState extends State<LlxExamplePage> {
   static const int _gpuLayers = 0;
 
   final TextEditingController _promptController = TextEditingController();
-  final TextEditingController _maxTokensController =
-      TextEditingController(text: '512');
-  final TextEditingController _temperatureController =
-      TextEditingController(text: '0.0');
+  final TextEditingController _maxTokensController = TextEditingController(
+    text: '512',
+  );
+  final TextEditingController _temperatureController = TextEditingController(
+    text: '0.0',
+  );
 
   String _response = '';
   LlxModel? _model;
@@ -60,16 +60,15 @@ class _LlxExamplePageState extends State<LlxExamplePage> {
   Future<void> _initializeExample() async {
     try {
       LlxFlutter.initialize();
+      debugPrint('LLX system info: ${LlxFlutter.systemInfo}');
+      debugPrint('LLX backend info: ${LlxFlutter.backendInfo}');
 
       final modelPath = await _copyAssetToTempFile(
         assetPath: _modelAssetPath,
         filename: _modelFilename,
       );
 
-      final model = LlxModel.loadFromFile(
-        modelPath,
-        nGpuLayers: _gpuLayers,
-      );
+      final model = LlxModel.loadFromFile(modelPath, nGpuLayers: _gpuLayers);
 
       if (!mounted) {
         model.dispose();
@@ -143,10 +142,8 @@ class _LlxExamplePageState extends State<LlxExamplePage> {
     LlxContext? context;
 
     try {
-      context = LlxContext.create(
-        _model!,
-        nCtx: _contextSize,
-      );
+      context = LlxContext.create(_model!, nCtx: _contextSize);
+      debugPrint('LLX context threads: ${context.nThreads}');
 
       await for (final token in context.generateStream(
         prompt,
@@ -200,9 +197,7 @@ $userPrompt $_qwenNoThinkInstruction
     final canGenerate = !_isLoadingModel && !_isGenerating && _model != null;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('LLX Flutter Example'),
-      ),
+      appBar: AppBar(title: const Text('LLX Flutter Example')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -228,9 +223,7 @@ $userPrompt $_qwenNoThinkInstruction
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                    ],
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -246,8 +239,9 @@ $userPrompt $_qwenNoThinkInstruction
                     ),
                     inputFormatters: [
                       TextInputFormatter.withFunction((oldValue, newValue) {
-                        final isValid =
-                            RegExp(r'^\d*\.?\d*$').hasMatch(newValue.text);
+                        final isValid = RegExp(
+                          r'^\d*\.?\d*$',
+                        ).hasMatch(newValue.text);
                         return isValid ? newValue : oldValue;
                       }),
                     ],
@@ -275,18 +269,14 @@ $userPrompt $_qwenNoThinkInstruction
               ],
             ),
             const SizedBox(height: 8),
-			Expanded(
-			  child: SingleChildScrollView(
-				child: SizedBox(
-				  width: double.infinity,
-				  child: Text(_response),
-				),
-			  ),
-			),
+            Expanded(
+              child: SingleChildScrollView(
+                child: SizedBox(width: double.infinity, child: Text(_response)),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 }
-

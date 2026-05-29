@@ -1,72 +1,46 @@
 # llx_flutter
 
-A new Flutter FFI plugin project.
+A Flutter FFI plugin that wraps `llama.cpp` for local GGUF inference.
 
-## Getting Started
+## Platform support
 
-This project is a starting point for a Flutter
-[FFI plugin](https://flutter.dev/to/ffi-package),
-a specialized package that includes native code directly invoked with Dart FFI.
+* Android builds `llama.cpp` from the `src/llama.cpp` submodule through the
+  plugin CMake build. The default Android build is CPU-only and optimized for
+  compatibility: native code is built as `Release`, and the CPU backend is linked
+  directly rather than discovered from dynamically loaded backend variant files.
+* iOS uses the checked-in `ios/Frameworks/llama.xcframework`. The iOS build does
+  not build the `llama.cpp` submodule.
+* Android GPU acceleration is not enabled by default. llama.cpp has Android GPU
+  backend options such as OpenCL for newer Qualcomm Adreno devices, but those
+  require a separate opt-in build flavor and real-device validation.
+* Android arm64 builds can opt into KleidiAI CPU kernels by passing
+  `-DLLX_ANDROID_USE_KLEIDIAI=ON` to the plugin CMake build. This is disabled by
+  default because llama.cpp fetches the KleidiAI source during native configure.
+* Dynamic ggml CPU backend variants are not enabled by default because Flutter's
+  Android packaging may leave native libraries unextracted from the APK, which
+  makes filesystem-based backend discovery unreliable.
 
-## Project structure
+The example currently passes `nGpuLayers: 0`, so generation is CPU-only unless
+the app is changed to request GPU offload and the native build includes a GPU
+backend.
 
-This template uses the following structure:
+## Building the example
 
-* `src`: Contains the native source code, and a CmakeFile.txt file for building
-  that source code into a dynamic library.
-
-* `lib`: Contains the Dart code that defines the API of the plugin, and which
-  calls into the native code using `dart:ffi`.
-
-* platform folders (`android`, `ios`, `windows`, etc.): Contains the build files
-  for building and bundling the native code library with the platform application.
-
-## Building and bundling native code
-
-The `pubspec.yaml` specifies FFI plugins as follows:
-
-```yaml
-  plugin:
-    platforms:
-      some_platform:
-        ffiPlugin: true
+```sh
+flutter pub get
+cd example
+flutter pub get
+flutter build apk --debug
+flutter build ios --debug --no-codesign
 ```
 
-This configuration invokes the native build for the various target platforms
-and bundles the binaries in Flutter applications using these FFI plugins.
+The Android APK build requires the `src/llama.cpp` submodule to be present.
 
-This can be combined with dartPluginClass, such as when FFI is used for the
-implementation of one platform in a federated plugin:
+## Runtime diagnostics
 
-```yaml
-  plugin:
-    implements: some_other_plugin
-    platforms:
-      some_platform:
-        dartPluginClass: SomeClass
-        ffiPlugin: true
-```
-
-A plugin can have both FFI and method channels:
-
-```yaml
-  plugin:
-    platforms:
-      some_platform:
-        pluginClass: SomeName
-        ffiPlugin: true
-```
-
-The native build systems that are invoked by FFI (and method channel) plugins are:
-
-* For Android: Gradle, which invokes the Android NDK for native builds.
-  * See the documentation in android/build.gradle.
-* For iOS and MacOS: Xcode, via CocoaPods.
-  * See the documentation in ios/llx_flutter.podspec.
-  * See the documentation in macos/llx_flutter.podspec.
-* For Linux and Windows: CMake.
-  * See the documentation in linux/CMakeLists.txt.
-  * See the documentation in windows/CMakeLists.txt.
+The Dart API exposes `LlxFlutter.systemInfo`, `LlxFlutter.backendInfo`, and
+`LlxContext.nThreads` so apps can confirm which llama.cpp CPU features, backends,
+devices, and thread count are active at runtime.
 
 ## Binding to native code
 
@@ -89,4 +63,3 @@ For example, see `sumAsync` in `lib/llx_flutter.dart`.
 For help getting started with Flutter, view our
 [online documentation](https://docs.flutter.dev), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
-

@@ -45,6 +45,29 @@ class LlxFlutterBindings {
   late final _llx_backend_free = _llx_backend_freePtr
       .asFunction<void Function()>();
 
+  /// Runtime diagnostics
+  ffi.Pointer<ffi.Char> llx_system_info() {
+    return _llx_system_info();
+  }
+
+  late final _llx_system_infoPtr =
+      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Char> Function()>>(
+        'llx_system_info',
+      );
+  late final _llx_system_info = _llx_system_infoPtr
+      .asFunction<ffi.Pointer<ffi.Char> Function()>();
+
+  ffi.Pointer<ffi.Char> llx_backend_info() {
+    return _llx_backend_info();
+  }
+
+  late final _llx_backend_infoPtr =
+      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Char> Function()>>(
+        'llx_backend_info',
+      );
+  late final _llx_backend_info = _llx_backend_infoPtr
+      .asFunction<ffi.Pointer<ffi.Char> Function()>();
+
   /// Get default parameters
   llx_model_params llx_default_model_params() {
     return _llx_default_model_params();
@@ -156,6 +179,17 @@ class LlxFlutterBindings {
       );
   late final _llx_free_context = _llx_free_contextPtr
       .asFunction<void Function(ffi.Pointer<llx_context>)>();
+
+  int llx_context_n_threads(ffi.Pointer<llx_context> context) {
+    return _llx_context_n_threads(context);
+  }
+
+  late final _llx_context_n_threadsPtr =
+      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<llx_context>)>>(
+        'llx_context_n_threads',
+      );
+  late final _llx_context_n_threads = _llx_context_n_threadsPtr
+      .asFunction<int Function(ffi.Pointer<llx_context>)>();
 
   /// Text Generation - Streaming with callback
   int llx_generate_stream(

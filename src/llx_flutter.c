@@ -10,6 +10,18 @@
 #else
 #  include <llama/llama.h>
 #endif
+#if defined(__has_include)
+#  if __has_include(<llama/ggml-backend.h>)
+#    include <llama/ggml-backend.h>
+#  elif __has_include(<ggml-backend.h>)
+#    include <ggml-backend.h>
+#  else
+#    error "Unable to find ggml backend public header"
+#  endif
+#else
+#  include <ggml-backend.h>
+#endif
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,7 +36,26 @@ struct llx_context {
     struct llama_context* context;
     struct llama_sampler* sampler;
     const struct llama_vocab* vocab;
+    int32_t n_threads;
 };
+
+static void append_format(char* buffer, size_t size, size_t* offset, const char* format, ...) {
+    if (!buffer || !offset || *offset >= size) return;
+
+    va_list args;
+    va_start(args, format);
+    int written = vsnprintf(buffer + *offset, size - *offset, format, args);
+    va_end(args);
+
+    if (written < 0) return;
+
+    size_t remaining = size - *offset;
+    if ((size_t)written >= remaining) {
+        *offset = size - 1;
+    } else {
+        *offset += (size_t)written;
+    }
+}
 
 // UTF-8 validation helper (from Android example)
 static bool is_valid_utf8(const char* string) {
@@ -64,11 +95,60 @@ static bool is_valid_utf8(const char* string) {
 
 FFI_PLUGIN_EXPORT void llx_backend_init(void) {
     ggml_backend_load_all();
+    llama_backend_init();
 }
 
 FFI_PLUGIN_EXPORT void llx_backend_free(void) {
-    // Note: llama.cpp doesn't provide ggml_backend_free_all()
-    // Backend cleanup happens automatically on process exit
+    llama_backend_free();
+}
+
+FFI_PLUGIN_EXPORT const char* llx_system_info(void) {
+    return llama_print_system_info();
+}
+
+FFI_PLUGIN_EXPORT const char* llx_backend_info(void) {
+    static char buffer[2048];
+    size_t offset = 0;
+
+    buffer[0] = '\0';
+
+    append_format(buffer, sizeof(buffer), &offset, "backends:");
+    size_t backend_count = ggml_backend_reg_count();
+    if (backend_count == 0) {
+        append_format(buffer, sizeof(buffer), &offset, " none");
+    } else {
+        for (size_t i = 0; i < backend_count; i++) {
+            ggml_backend_reg_t reg = ggml_backend_reg_get(i);
+            append_format(
+                buffer,
+                sizeof(buffer),
+                &offset,
+                "%s%s",
+                i == 0 ? " " : ", ",
+                reg ? ggml_backend_reg_name(reg) : "unknown"
+            );
+        }
+    }
+
+    append_format(buffer, sizeof(buffer), &offset, "; devices:");
+    size_t device_count = ggml_backend_dev_count();
+    if (device_count == 0) {
+        append_format(buffer, sizeof(buffer), &offset, " none");
+    } else {
+        for (size_t i = 0; i < device_count; i++) {
+            ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+            append_format(
+                buffer,
+                sizeof(buffer),
+                &offset,
+                "%s%s",
+                i == 0 ? " " : ", ",
+                dev ? ggml_backend_dev_name(dev) : "unknown"
+            );
+        }
+    }
+
+    return buffer;
 }
 
 // =============================================================================
@@ -178,6 +258,7 @@ FFI_PLUGIN_EXPORT llx_error llx_create_context(
         ctx_params.n_threads = params->n_threads;
         ctx_params.n_threads_batch = params->n_threads;
     }
+    wrapper->n_threads = ctx_params.n_threads;
     
     // Create context
     wrapper->context = llama_init_from_model(model->model, ctx_params);
@@ -213,6 +294,10 @@ FFI_PLUGIN_EXPORT void llx_free_context(llx_context* context) {
         llama_free(context->context);
     }
     free(context);
+}
+
+FFI_PLUGIN_EXPORT int32_t llx_context_n_threads(const llx_context* context) {
+    return context ? context->n_threads : 0;
 }
 
 // =============================================================================

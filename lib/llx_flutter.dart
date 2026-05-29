@@ -26,39 +26,60 @@ final LlxFlutterBindings _bindings = LlxFlutterBindings(_dylib);
 class LlxException implements Exception {
   final int errorCode;
   final String message;
-  
+
   LlxException(this.errorCode, this.message);
-  
+
   @override
   String toString() => 'LlxException($errorCode): $message';
+}
+
+/// Runtime information reported by the native llama.cpp backend.
+class LlxRuntimeDiagnostics {
+  final String systemInfo;
+  final String backendInfo;
+
+  const LlxRuntimeDiagnostics({
+    required this.systemInfo,
+    required this.backendInfo,
+  });
+
+  @override
+  String toString() => 'systemInfo: $systemInfo\nbackendInfo: $backendInfo';
 }
 
 /// Wrapper for LLX model
 class LlxModel {
   final Pointer<llx_model> _model;
   bool _disposed = false;
-  
+
   LlxModel._(this._model);
-  
+
   /// Load a model from file
   static LlxModel loadFromFile(String modelPath, {int nGpuLayers = 0}) {
     final modelParams = calloc<llx_model_params>();
     final outModel = calloc<Pointer<llx_model>>();
-    
+
     try {
       // Set parameters
       modelParams.ref.n_gpu_layers = nGpuLayers;
-      
+
       // Convert path to C string
       final pathPtr = modelPath.toNativeUtf8();
-      
+
       try {
-        final error = _bindings.llx_load_model(pathPtr.cast(), modelParams, outModel);
+        final error = _bindings.llx_load_model(
+          pathPtr.cast(),
+          modelParams,
+          outModel,
+        );
         if (error != LLX_SUCCESS) {
-          final errorMsg = _bindings.llx_error_string(error).cast<Utf8>().toDartString();
+          final errorMsg = _bindings
+              .llx_error_string(error)
+              .cast<Utf8>()
+              .toDartString();
           throw LlxException(error, errorMsg);
         }
-        
+
         return LlxModel._(outModel.value);
       } finally {
         calloc.free(pathPtr);
@@ -68,14 +89,14 @@ class LlxModel {
       calloc.free(outModel);
     }
   }
-  
+
   void dispose() {
     if (!_disposed) {
       _bindings.llx_free_model(_model);
       _disposed = true;
     }
   }
-  
+
   bool get isDisposed => _disposed;
   Pointer<llx_model> get pointer => _disposed ? nullptr : _model;
 }
@@ -84,37 +105,44 @@ class LlxModel {
 class LlxContext {
   final Pointer<llx_context> _context;
   bool _disposed = false;
-  
+
   LlxContext._(this._context);
-  
+
   /// Create context from model
   static LlxContext create(LlxModel model, {int? nCtx, int? nThreads}) {
     if (model.isDisposed) {
       throw StateError('Cannot create context from disposed model');
     }
-    
+
     final contextParams = calloc<llx_context_params>();
     final outContext = calloc<Pointer<llx_context>>();
-    
+
     try {
       // Set parameters
       final defaultParams = _bindings.llx_default_context_params();
       contextParams.ref.n_ctx = nCtx ?? defaultParams.n_ctx;
       contextParams.ref.n_threads = nThreads ?? defaultParams.n_threads;
-      
-      final error = _bindings.llx_create_context(model.pointer, contextParams, outContext);
+
+      final error = _bindings.llx_create_context(
+        model.pointer,
+        contextParams,
+        outContext,
+      );
       if (error != LLX_SUCCESS) {
-        final errorMsg = _bindings.llx_error_string(error).cast<Utf8>().toDartString();
+        final errorMsg = _bindings
+            .llx_error_string(error)
+            .cast<Utf8>()
+            .toDartString();
         throw LlxException(error, errorMsg);
       }
-      
+
       return LlxContext._(outContext.value);
     } finally {
       calloc.free(contextParams);
       calloc.free(outContext);
     }
   }
-  
+
   /// Generate text with streaming callback
   Stream<String> generateStream(
     String prompt, {
@@ -124,9 +152,9 @@ class LlxContext {
     if (_disposed) {
       throw StateError('Cannot generate from disposed context');
     }
-    
+
     late StreamController<String> controller;
-    
+
     controller = StreamController<String>(
       onListen: () async {
         await _runGeneration(controller, prompt, nPredict, temperature);
@@ -135,10 +163,10 @@ class LlxContext {
         // TODO: Implement cancellation
       },
     );
-    
+
     return controller.stream;
   }
-  
+
   Future<void> _runGeneration(
     StreamController<String> controller,
     String prompt,
@@ -147,7 +175,7 @@ class LlxContext {
   ) async {
     // Run on separate isolate to avoid blocking UI
     final port = ReceivePort();
-    
+
     try {
       await Isolate.spawn(_isolateGeneration, [
         port.sendPort,
@@ -156,7 +184,7 @@ class LlxContext {
         nPredict ?? 32,
         temperature ?? 0.8,
       ]);
-      
+
       await for (final message in port) {
         if (message is String) {
           if (message == '__DONE__') {
@@ -176,15 +204,22 @@ class LlxContext {
       port.close();
     }
   }
-  
+
   void dispose() {
     if (!_disposed) {
       _bindings.llx_free_context(_context);
       _disposed = true;
     }
   }
-  
+
   bool get isDisposed => _disposed;
+
+  int get nThreads {
+    if (_disposed) {
+      throw StateError('Cannot read thread count from disposed context');
+    }
+    return _bindings.llx_context_n_threads(_context);
+  }
 }
 
 /// Isolate function for text generation
@@ -194,28 +229,28 @@ void _isolateGeneration(List<dynamic> args) {
   final prompt = args[2] as String;
   final nPredict = args[3] as int;
   final temperature = args[4] as double;
-  
+
   try {
     // Reconstruct context pointer
     final context = Pointer<llx_context>.fromAddress(contextAddress);
-    
+
     // Set up generation parameters
     final genParams = calloc<llx_generate_params>();
     genParams.ref.n_predict = nPredict;
     genParams.ref.temperature = temperature;
-    
+
     // Convert prompt to C string
     final promptPtr = prompt.toNativeUtf8();
-    
+
     // Create callback function
     final callback = Pointer.fromFunction<llx_token_callbackFunction>(
       _tokenCallback,
       false, // Default return value
     );
-    
+
     // Store send port for callback access
     _currentSendPort = sendPort;
-    
+
     try {
       final error = _bindings.llx_generate_stream(
         context,
@@ -224,9 +259,12 @@ void _isolateGeneration(List<dynamic> args) {
         callback,
         nullptr,
       );
-      
+
       if (error != LLX_SUCCESS) {
-        final errorMsg = _bindings.llx_error_string(error).cast<Utf8>().toDartString();
+        final errorMsg = _bindings
+            .llx_error_string(error)
+            .cast<Utf8>()
+            .toDartString();
         sendPort.send('__ERROR__: $errorMsg');
       } else {
         sendPort.send('__DONE__');
@@ -259,7 +297,7 @@ bool _tokenCallback(Pointer<Char> tokenPiece, Pointer<Void> userData) {
 /// Main LLX Flutter API
 class LlxFlutter {
   static bool _initialized = false;
-  
+
   /// Initialize the LLX backend
   static void initialize() {
     if (!_initialized) {
@@ -267,7 +305,7 @@ class LlxFlutter {
       _initialized = true;
     }
   }
-  
+
   /// Shutdown the LLX backend
   static void shutdown() {
     if (_initialized) {
@@ -275,7 +313,24 @@ class LlxFlutter {
       _initialized = false;
     }
   }
-  
+
+  /// Get native llama.cpp system information.
+  static String get systemInfo {
+    return _bindings.llx_system_info().cast<Utf8>().toDartString();
+  }
+
+  /// Get registered native backend and device information.
+  static String get backendInfo {
+    return _bindings.llx_backend_info().cast<Utf8>().toDartString();
+  }
+
+  static LlxRuntimeDiagnostics get diagnostics {
+    return LlxRuntimeDiagnostics(
+      systemInfo: systemInfo,
+      backendInfo: backendInfo,
+    );
+  }
+
   /// Get error message for error code
   static String getErrorString(int errorCode) {
     return _bindings.llx_error_string(errorCode).cast<Utf8>().toDartString();
