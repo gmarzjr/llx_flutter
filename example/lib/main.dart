@@ -36,7 +36,7 @@ class _MyAppState extends State<MyApp> {
     });
 
     try {
-      _modelPath = await prepareAssetForFFI('assets/qwen3-0.6b-q4_k_s.gguf', 'qwen3-0.6b-q4_k_s.gguf');
+      _modelPath = await prepareAssetForFFI('assets/model.gguf', 'model.gguf');
       setState(() {
         _status = 'Model ready at: $_modelPath';
       });
