@@ -1,80 +1,116 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:llx_flutter/llx_flutter.dart';
+import 'package:path_provider/path_provider.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const LlxExampleApp());
 }
 
-class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+class LlxExampleApp extends StatelessWidget {
+  const LlxExampleApp({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      home: LlxExamplePage(),
+    );
+  }
 }
 
-class _MyAppState extends State<MyApp> {
-  String _status = 'Not initialized';
+class LlxExamplePage extends StatefulWidget {
+  const LlxExamplePage({super.key});
+
+  @override
+  State<LlxExamplePage> createState() => _LlxExamplePageState();
+}
+
+class _LlxExamplePageState extends State<LlxExamplePage> {
+  static const String _modelAssetPath = 'assets/model.gguf';
+  static const String _modelFilename = 'model.gguf';
+
+  // This example is written for Qwen3-style chat prompts.
+  //
+  // Qwen3 supports a "/no_think" instruction to disable thinking mode. Other
+  // GGUF chat models may require a different prompt template.
+  static const String _qwenNoThinkInstruction = '/no_think';
+
+  static const int _contextSize = 1024;
+  static const int _maxGeneratedTokens = 512;
+  static const int _gpuLayers = 0;
+
   final TextEditingController _promptController = TextEditingController();
+
+  String _status = 'Starting...';
   String _response = '';
-  bool _isGenerating = false;
   String? _modelPath;
+  bool _isPreparingModel = true;
+  bool _isGenerating = false;
 
   @override
   void initState() {
     super.initState();
-    _initializeLlx();
-    _promptController.text = 'Hi';
-    _prepareModel();
+    _initializeExample();
   }
 
-  Future<void> _prepareModel() async {
-    setState(() {
-      _status = 'Preparing model from assets...';
-    });
-
+  Future<void> _initializeExample() async {
     try {
-      _modelPath = await prepareAssetForFFI('assets/model.gguf', 'model.gguf');
+      LlxFlutter.initialize();
+      _setStatus('LLX backend initialized');
+
+      final modelPath = await _copyAssetToTempFile(
+        assetPath: _modelAssetPath,
+        filename: _modelFilename,
+      );
+
+      if (!mounted) return;
+
       setState(() {
-        _status = 'Model ready at: $_modelPath';
+        _modelPath = modelPath;
+        _isPreparingModel = false;
+        _status = 'Model ready';
       });
     } catch (e) {
+      if (!mounted) return;
+
       setState(() {
-        _status = 'Failed to prepare model: $e';
+        _isPreparingModel = false;
+        _status = 'Failed to initialize example: $e';
       });
     }
   }
 
-  Future<String> prepareAssetForFFI(String assetPath, String filename) async {
-    // Load from assets
+  Future<String> _copyAssetToTempFile({
+    required String assetPath,
+    required String filename,
+  }) async {
+    _setStatus('Preparing model from assets...');
+
     final data = await rootBundle.load(assetPath);
-    // Write to a real temp file
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/$filename');
+    final directory = await getTemporaryDirectory();
+    final file = File('${directory.path}/$filename');
+
     await file.writeAsBytes(
       data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
       flush: true,
     );
-    return file.path; // This path can be passed to C
+
+    return file.path;
   }
 
-  void _initializeLlx() {
-    try {
-      LlxFlutter.initialize();
-      setState(() {
-        _status = 'LLX backend initialized successfully';
-      });
-    } catch (e) {
-      setState(() {
-        _status = 'Failed to initialize: $e';
-      });
-    }
-  }
-
-  void _generate() async {
+  Future<void> _generate() async {
     if (_isGenerating || _modelPath == null) return;
+
+    final userPrompt = _promptController.text.trim();
+
+    if (userPrompt.isEmpty) {
+      _setStatus('Enter a prompt first.');
+      return;
+    }
+
+    final prompt = _formatQwen3Prompt(userPrompt);
 
     setState(() {
       _isGenerating = true;
@@ -82,49 +118,66 @@ class _MyAppState extends State<MyApp> {
       _status = 'Loading model...';
     });
 
+    LlxModel? model;
+    LlxContext? context;
+
     try {
-      // Load model using the prepared file path
-      final model = LlxModel.loadFromFile(_modelPath!, nGpuLayers: 0);
-      
-      setState(() {
-        _status = 'Creating context...';
-      });
+      model = LlxModel.loadFromFile(
+        _modelPath!,
+        nGpuLayers: _gpuLayers,
+      );
 
-      // Create context
-      final context = LlxContext.create(model, nCtx: 1024);
+      _setStatus('Creating context...');
 
-      setState(() {
-        _status = 'Generating...';
-      });
+      context = LlxContext.create(
+        model,
+        nCtx: _contextSize,
+      );
 
-      // Generate with streaming
+      _setStatus('Generating...');
+
       await for (final token in context.generateStream(
-        '<|im_start|>user\n/no_think ${_promptController.text}<|im_end|>\n<|im_start|>assistant\n',
-        nPredict: 512,
+        prompt,
+        nPredict: _maxGeneratedTokens,
         temperature: 0.0,
       )) {
+        if (!mounted) return;
+
         setState(() {
           _response += token;
         });
       }
 
-      // Cleanup
-      context.dispose();
-      model.dispose();
-
-      setState(() {
-        _status = 'Generation complete';
-      });
-
+      _setStatus('Generation complete');
     } catch (e) {
-      setState(() {
-        _status = 'Error: $e';
-      });
+      _setStatus('Error: $e');
     } finally {
-      setState(() {
-        _isGenerating = false;
-      });
+      context?.dispose();
+      model?.dispose();
+
+      if (mounted) {
+        setState(() {
+          _isGenerating = false;
+        });
+      }
     }
+  }
+
+  String _formatQwen3Prompt(String userPrompt) {
+    return '''
+<|im_start|>user
+$userPrompt $_qwenNoThinkInstruction
+<|im_end|>
+<|im_start|>assistant
+''';
+  }
+
+  void _setStatus(String status) {
+    if (!mounted) return;
+
+    setState(() {
+      _status = status;
+    });
   }
 
   @override
@@ -136,53 +189,62 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(title: const Text('LLX Flutter Example')),
-        body: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              Text(
-                _status,
-                style: const TextStyle(fontSize: 16),
-                textAlign: TextAlign.center,
+    final canGenerate =
+        !_isPreparingModel && !_isGenerating && _modelPath != null;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('LLX Flutter Example'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text(
+              _status,
+              style: const TextStyle(fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _promptController,
+              decoration: const InputDecoration(
+                labelText: 'Prompt',
+                hintText: 'Enter a prompt for the local Qwen3 model',
+                border: OutlineInputBorder(),
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _promptController,
-                decoration: const InputDecoration(
-                  labelText: 'Prompt',
-                  border: OutlineInputBorder(),
+              minLines: 3,
+              maxLines: 5,
+              textInputAction: TextInputAction.newline,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: canGenerate ? _generate : null,
+              child: Text(_isGenerating ? 'Generating...' : 'Generate'),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                maxLines: 3,
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: (_isGenerating || _modelPath == null) ? null : _generate,
-                child: Text(_isGenerating ? 'Generating...' : 'Generate'),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: SingleChildScrollView(
-                    child: Text(
-                      _response.isEmpty ? 'Response will appear here...' : _response,
-                      style: const TextStyle(fontSize: 14),
-                    ),
+                child: SingleChildScrollView(
+                  child: Text(
+                    _response.isEmpty
+                        ? 'Response will appear here...'
+                        : _response,
+                    style: const TextStyle(fontSize: 14),
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
+
