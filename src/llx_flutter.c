@@ -1,5 +1,15 @@
 #include "llx_flutter.h"
-#include <llama/llama.h>
+#if defined(__has_include)
+#  if __has_include(<llama/llama.h>)
+#    include <llama/llama.h>
+#  elif __has_include(<llama.h>)
+#    include <llama.h>
+#  else
+#    error "Unable to find llama.cpp public header"
+#  endif
+#else
+#  include <llama/llama.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
