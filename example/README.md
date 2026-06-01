@@ -1,43 +1,47 @@
 # llx_flutter_example
 
-Example Flutter app for the `llx_flutter` plugin.
+Example Flutter app for the `llx_flutter` plugin. It demonstrates the complete
+Flutter -> Dart FFI -> native llama.cpp path for local, on-device GGUF
+inference.
 
-This example demonstrates local llama.cpp-backed inference from Flutter using a GGUF model bundled as an app asset. It loads a model through the plugin, creates an inference context, streams generated tokens into the UI, and exposes a few simple generation controls.
+The app initializes the plugin, copies a bundled GGUF asset to a temporary file
+for native access, loads the model once, creates a fresh context for each
+generation, streams generated tokens into the UI, and displays generation
+metrics.
 
-## What this example shows
+## What the app shows
 
-* Loading a local GGUF model from Flutter assets
-* Copying the model asset to a real filesystem path for native FFI use
-* Initializing the `llx_flutter` backend
-* Loading the model once when the app starts
-* Creating a fresh inference context for each generation
-* Streaming generated text into the Flutter UI
-* Passing generation parameters from simple text fields
-* Formatting prompts for a Qwen3-style chat model
+* Loading a local GGUF model from Flutter assets.
+* Copying the model asset to a real filesystem path for native FFI use.
+* Initializing and shutting down the llama.cpp backend.
+* Loading one model and creating a fresh context per generation.
+* Streaming tokens through `LlxContext.generateStream`.
+* Controlling max tokens, temperature, and thread count from the UI.
+* Reporting actual thread count and generation throughput.
+* Formatting prompts for a Qwen3-style chat model.
 
 ## Model file
 
-Model weights are not committed to this repository.
-
-The example expects a GGUF model at:
+Model weights are not committed to this repository. Place a compatible GGUF
+model at:
 
 ```text
 example/assets/model.gguf
 ```
 
-The model is referenced in the Flutter asset bundle as:
+The app references it in Flutter as:
 
 ```text
 assets/model.gguf
 ```
 
-To run inference, place a compatible GGUF model at `example/assets/model.gguf`.
+`example/assets/*.gguf` is ignored by git, so local model files stay out of the
+repository. The current example is written around a Qwen3-style chat model; a
+small quantized model is usually the most practical choice for mobile testing.
 
-## Qwen3 prompt format
+## Prompt format
 
-This example is written around a Qwen3-style chat prompt template.
-
-The app formats user input like this:
+The app formats user input as a Qwen3-style chat prompt:
 
 ```text
 <|im_start|>user
@@ -46,87 +50,109 @@ The app formats user input like this:
 <|im_start|>assistant
 ```
 
-The `/no_think` instruction is specific to Qwen3-style behavior. Other GGUF chat models may require a different prompt template.
-
-If you use a different model family, update the prompt formatting function in `lib/main.dart`.
+The `/no_think` instruction is specific to Qwen3-style behavior. If you use a
+different GGUF model family, update `_formatQwen3Prompt` in `lib/main.dart`.
 
 ## Generation settings
 
-The example exposes these generation-time values in the UI:
+The UI exposes:
 
-| Field       | Default | Description                          |
-| ----------- | ------: | ------------------------------------ |
-| Max tokens  |   `512` | Maximum number of tokens to generate |
-| Temperature |   `0.0` | Sampling temperature                 |
+| Field | Default | Description |
+| --- | ---: | --- |
+| Max tokens | `512` | Maximum number of tokens to generate. |
+| Temperature | `0.0` | Sampling temperature; `0.0` uses greedy sampling. |
+| Threads | Auto | Optional positive thread count for the native context. |
 
-The example uses:
+The example also uses:
 
 ```text
 nGpuLayers: 0
 nCtx: 1024
 ```
 
-`nGpuLayers` is set when the model is loaded. `nCtx` is set when the context is created.
+`nGpuLayers` is set when the model is loaded. `nCtx` and `nThreads` are set when
+the context is created. Each generation disposes its context after streaming
+finishes.
 
-The model is loaded once during app initialization. Each generation creates a fresh context, streams output, and disposes the context after generation completes.
-
-## Running the example
+## Setup
 
 From the repository root:
 
 ```sh
 git submodule update --init --recursive
 flutter pub get
-```
-
-Then from the example directory:
-
-```sh
 cd example
 flutter pub get
 ```
 
-Place a compatible GGUF model at:
+Then place your model at:
 
 ```text
 example/assets/model.gguf
 ```
 
-Run the app:
+## Android
+
+Android builds llama.cpp through the plugin CMake build automatically. Run on an
+Android device or emulator with:
 
 ```sh
-flutter run
-```
-
-To run on a specific device:
-
-```sh
+cd example
 flutter devices
-flutter run -d <device-id>
+flutter run -d <android-device-id>
 ```
 
-## iOS build check
-
-A debug iOS build can be checked with:
+To verify a debug APK build:
 
 ```sh
+cd example
+flutter build apk --debug
+```
+
+## iOS
+
+iOS requires a locally generated `llama.xcframework`. From the repository root:
+
+```sh
+git submodule update --init --recursive
+cd src/llama.cpp
+./build-xcframework.sh
+cd ../..
+mkdir -p ios/Frameworks
+rm -rf ios/Frameworks/llama.xcframework
+cp -R src/llama.cpp/build-apple/llama.xcframework ios/Frameworks/llama.xcframework
+```
+
+Then run the example:
+
+```sh
+cd example
+flutter devices
+flutter run -d <ios-device-or-simulator-id>
+```
+
+To verify a debug iOS build without code signing:
+
+```sh
+cd example
 flutter build ios --debug --no-codesign
 ```
 
-This verifies the Flutter example and plugin build without requiring code signing.
+The generated `ios/Frameworks/llama.xcframework` is ignored by git. Rebuild and
+copy it after a clean checkout or whenever the ignored framework is missing.
 
-## Notes
+## UI
 
-This example is intentionally small. It is meant to make the Flutter → Dart FFI → native llama.cpp path easy to inspect.
+The example intentionally keeps the interface small:
 
-The UI is minimal by design:
+* Prompt input.
+* Max token input.
+* Temperature input.
+* Thread count input.
+* Clear prompt button.
+* Generate button.
+* Streamed response output.
+* Thread and generation metrics.
 
-* prompt input
-* max token input
-* temperature input
-* clear prompt button
-* generate button
-* streamed response output
-
-Model selection, chat history, cancellation, production lifecycle handling, and platform-specific packaging details are outside the scope of this example.
-
+Model selection, chat history, cancellation, production lifecycle handling, and
+platform-specific packaging are outside the scope of this example.

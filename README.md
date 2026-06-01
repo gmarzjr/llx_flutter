@@ -1,65 +1,171 @@
 # llx_flutter
 
-A Flutter FFI plugin that wraps `llama.cpp` for local GGUF inference.
+`llx_flutter` is a Flutter FFI plugin for running local GGUF language models
+through [llama.cpp](https://github.com/ggerganov/llama.cpp). It is focused on
+mobile, on-device inference: Dart owns the app-facing API and lifecycle, while
+the native layer owns llama.cpp model loading, context creation, token
+generation, and runtime diagnostics.
+
+The repository includes an example app that bundles a GGUF model as a Flutter
+asset, copies it to a real filesystem path for native FFI access, streams tokens
+back into the UI, and reports basic generation metrics.
+
+## Current capabilities
+
+* Load a GGUF model from a local path with configurable `nGpuLayers`.
+* Create an inference context with configurable `nCtx` and `nThreads`.
+* Stream generated text through a Dart `Stream<String>`.
+* Run generation on a helper isolate so long native calls do not block the UI.
+* Read llama.cpp system/backend diagnostics from Dart.
+* Read per-generation prompt/decode timing, token counts, and tokens per second.
+
+The primary Dart entry points are `LlxFlutter.initialize`,
+`LlxModel.loadFromFile`, `LlxContext.create`, `LlxContext.generateStream`,
+`LlxContext.generationStats`, and `LlxFlutter.shutdown`.
 
 ## Platform support
 
-* Android builds `llama.cpp` from the `src/llama.cpp` submodule through the
-  plugin CMake build. The default Android build is CPU-only and optimized for
-  compatibility: native code is built as `Release`, and the CPU backend is linked
-  directly rather than discovered from dynamically loaded backend variant files.
-* iOS uses the checked-in `ios/Frameworks/llama.xcframework`. The iOS build does
-  not build the `llama.cpp` submodule.
-* Android GPU acceleration is not enabled by default. llama.cpp has Android GPU
-  backend options such as OpenCL for newer Qualcomm Adreno devices, but those
-  require a separate opt-in build flavor and real-device validation.
-* Android arm64 builds can opt into KleidiAI CPU kernels by passing
-  `-DLLX_ANDROID_USE_KLEIDIAI=ON` to the plugin CMake build. This is disabled by
-  default because llama.cpp fetches the KleidiAI source during native configure.
-* Dynamic ggml CPU backend variants are not enabled by default because Flutter's
-  Android packaging may leave native libraries unextracted from the APK, which
-  makes filesystem-based backend discovery unreliable.
+| Platform | Status | Native dependency path |
+| --- | --- | --- |
+| Android | Supported | Flutter/Gradle invokes `src/CMakeLists.txt`, which builds llama.cpp from the `src/llama.cpp` submodule. |
+| iOS | Supported | CocoaPods links a locally generated `ios/Frameworks/llama.xcframework`. |
 
-The example currently passes `nGpuLayers: 0`, so generation is CPU-only unless
-the app is changed to request GPU offload and the native build includes a GPU
+Android builds are CPU-only by default and optimized for compatibility. The
+plugin builds native code as `Release`, links the ggml CPU backend directly, and
+disables dynamic backend variants because Flutter Android packaging can leave
+native libraries unextracted from the APK.
+
+iOS does not build llama.cpp during the Flutter build. The `llama.xcframework`
+is intentionally not tracked in git because it is hundreds of megabytes. Build
+it from the submodule before building or running the iOS example.
+
+The example passes `nGpuLayers: 0`, so inference is CPU-only unless the app is
+changed to request GPU offload and the native build includes an appropriate
 backend.
 
-## Building the example
+## Prerequisites
+
+* Flutter with Dart support for this package's SDK constraints.
+* Git submodule support.
+* Android Studio or the Android SDK/NDK for Android builds.
+* Xcode, CocoaPods, and CMake for iOS XCFramework generation and iOS builds.
+* A local GGUF model for the example app.
+
+## Repository setup
+
+From a fresh clone:
 
 ```sh
+git submodule update --init --recursive
 flutter pub get
 cd example
 flutter pub get
+```
+
+Model weights are not committed. To run the example, place a compatible GGUF
+model at:
+
+```text
+example/assets/model.gguf
+```
+
+`example/assets/*.gguf` is ignored so local model files do not get committed.
+
+## Android build and run
+
+The Android build uses the plugin CMake file at `src/CMakeLists.txt`; no manual
+native build step is required beyond initializing the llama.cpp submodule.
+
+```sh
+cd example
+flutter run -d <android-device-id>
+```
+
+To verify a debug APK build:
+
+```sh
+cd example
 flutter build apk --debug
+```
+
+Android arm64 builds can opt into KleidiAI CPU kernels by passing
+`-DLLX_ANDROID_USE_KLEIDIAI=ON` to the plugin CMake build. That is off by
+default because llama.cpp fetches KleidiAI source during native configure and it
+needs real-device validation.
+
+Android GPU acceleration is also not enabled by default. llama.cpp supports
+mobile GPU backend work in some configurations, but this plugin currently keeps
+the default Android path CPU-first and portable.
+
+## iOS build and run
+
+Generate the llama.cpp XCFramework first:
+
+```sh
+git submodule update --init --recursive
+cd src/llama.cpp
+./build-xcframework.sh
+cd ../..
+mkdir -p ios/Frameworks
+rm -rf ios/Frameworks/llama.xcframework
+cp -R src/llama.cpp/build-apple/llama.xcframework ios/Frameworks/llama.xcframework
+```
+
+Then build or run the example:
+
+```sh
+cd example
+flutter run -d <ios-device-or-simulator-id>
+```
+
+To verify a debug iOS build without code signing:
+
+```sh
+cd example
 flutter build ios --debug --no-codesign
 ```
 
-The Android APK build requires the `src/llama.cpp` submodule to be present.
+`ios/Frameworks/llama.xcframework` is ignored by git. Regenerate and copy it
+after a clean checkout, after deleting ignored build artifacts, or after moving
+the repo to a new machine.
 
 ## Runtime diagnostics
 
-The Dart API exposes `LlxFlutter.systemInfo`, `LlxFlutter.backendInfo`, and
-`LlxContext.nThreads` so apps can confirm which llama.cpp CPU features, backends,
-devices, and thread count are active at runtime.
+The Dart API exposes llama.cpp runtime details so apps can confirm what native
+code is active on a device:
 
-## Binding to native code
+* `LlxFlutter.systemInfo` reports llama.cpp CPU/system feature information.
+* `LlxFlutter.backendInfo` reports registered ggml backends and devices.
+* `LlxContext.nThreads` reports the actual thread count used by a context.
+* `LlxContext.generationStats` reports prompt tokens, generated tokens, prompt
+  time, decode time, and tokens per second for the most recent generation.
 
-To use the native code, bindings in Dart are needed.
-To avoid writing these by hand, they are generated from the header file
-(`src/llx_flutter.h`) by `package:ffigen`.
-Regenerate the bindings by running `dart run ffigen --config ffigen.yaml`.
+The example prints system/backend diagnostics during startup and displays thread
+count plus generation metrics after a run.
 
-## Invoking native code
+## Regenerating Dart bindings
 
-Very short-running native functions can be directly invoked from any isolate.
-For example, see `sum` in `lib/llx_flutter.dart`.
+Bindings are generated from `src/llx_flutter.h` with `package:ffigen`.
 
-Longer-running functions should be invoked on a helper isolate to avoid
-dropping frames in Flutter applications.
-For example, see `sumAsync` in `lib/llx_flutter.dart`.
+```sh
+dart run ffigen --config ffigen.yaml
+```
 
-## Flutter help
+Regenerate bindings after changing the exported C API in `src/llx_flutter.h`.
 
-For help getting started with Flutter, view our
-[online documentation](https://docs.flutter.dev), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Troubleshooting
+
+If Android native configuration fails, first confirm the submodule exists:
+
+```sh
+git submodule update --init --recursive
+```
+
+If iOS cannot find `llama.xcframework`, regenerate it with
+`src/llama.cpp/build-xcframework.sh` and copy the output to
+`ios/Frameworks/llama.xcframework`.
+
+If the generated iOS framework cannot expose all required llama.cpp headers, the
+local `build-xcframework.sh` may need the pending upstream module-map fix for
+`ggml-opt.h`. That fix is intended to land in llama.cpp separately; until then,
+use a local script patch when generating the framework.
